@@ -38,8 +38,10 @@ function abort(msg, hint) {
 
 // ── Preflight checks ─────────────────────────────────────────────────────────
 
-if (!fs.existsSync(path.join(ROOT, 'node_modules'))) {
-  abort('node_modules not found', 'Run `npm install` first.');
+// Ensure devDependencies (pkg) are installed
+if (!fs.existsSync(path.join(ROOT, 'node_modules/pkg'))) {
+  console.log('Installing devDependencies…');
+  run('npm install');
 }
 
 const sqliteNode = path.join(ROOT, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node');
@@ -63,10 +65,10 @@ run('npm run build:client');
 
 // ── Step 2: package with pkg ─────────────────────────────────────────────────
 
-console.log('\n── 2/3  Package with @yao-pkg/pkg ───────────────────────────────────');
+console.log('\n── 2/3  Package with pkg ────────────────────────────────────────────');
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 
-run('npx --yes @yao-pkg/pkg . --compress GZip --output dist-exe/sf-pipeline.exe');
+run('npx pkg . --compress GZip --output dist-exe/sf-pipeline.exe');
 
 // ── Step 3: write deployment README ──────────────────────────────────────────
 
