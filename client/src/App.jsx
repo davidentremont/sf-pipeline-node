@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { usePipeline } from './hooks/usePipeline.js'
 import { useJobs } from './hooks/useJobs.js'
 import { useProgress } from './hooks/useProgress.js'
+import { useConnections } from './hooks/useConnections.js'
+import ConnectionPanel from './components/ConnectionPanel.jsx'
 import WorkerMonitor from './components/WorkerMonitor.jsx'
 import EventLog from './components/EventLog.jsx'
 
@@ -103,13 +105,19 @@ export default function App() {
   const { state, startPipeline, stopPipeline } = usePipeline()
   const { jobs, selectedJob, selectJob, loading: jobsLoading, reload: reloadJobs } = useJobs()
   const { progress: allProgress, refresh: refreshProgress } = useProgress()
+  const { connections, loading: connsLoading, save: saveConnection, remove: removeConnectionRaw, reload: reloadConnections } = useConnections()
 
-  const [instanceUrl, setInstanceUrl]   = useState(() => localStorage.getItem('sf_instanceUrl') || '')
-  const [accessToken, setAccessToken]   = useState(() => localStorage.getItem('sf_accessToken') || '')
-  const [showToken, setShowToken]       = useState(false)
-  const [batchSize, setBatchSize]       = useState(1000)
-  const [threads, setThreads]           = useState(5)
-  const [params, setParams]             = useState({})
+  const [selectedConnectionId, setSelectedConnectionId] = useState(null)
+  const [batchSize, setBatchSize] = useState(1000)
+  const [threads, setThreads] = useState(5)
+  const [params, setParams] = useState({})
+
+  // Auto-select the sole connection if one exists and nothing is chosen yet
+  useEffect(() => {
+    if (!selectedConnectionId && connections.length === 1) {
+      setSelectedConnectionId(connections[0].id)
+    }
+  }, [connections, selectedConnectionId])
 
   useEffect(() => {
     if (selectedJob) {
@@ -131,19 +139,27 @@ export default function App() {
     }
   }, [state.status])
 
-  const savedProgress = selectedJob && instanceUrl.trim()
-    ? allProgress.find(p => p.jobId === selectedJob.id && p.instanceUrl === instanceUrl.trim())
+  const activeConnection = connections.find(c => c.id === selectedConnectionId) || null
+  const instanceUrl = activeConnection?.instanceUrl || ''
+
+  const savedProgress = selectedJob && instanceUrl
+    ? allProgress.find(p => p.jobId === selectedJob.id && p.instanceUrl === instanceUrl)
     : null
 
   const isRunning = state.status === 'running' || state.status === 'stopping'
   const runtimeParamsFilled = (selectedJob?.runtimeParams || [])
     .filter(rp => rp.required)
     .every(rp => params[rp.plugin]?.[rp.key]?.trim())
-  const canStart = state.connected && selectedJob && instanceUrl.trim() && accessToken.trim() && runtimeParamsFilled && !isRunning
+  const canStart = state.connected && selectedJob && selectedConnectionId && activeConnection?.hasToken && runtimeParamsFilled && !isRunning
   const canStop  = state.status === 'running'
 
+  const handleDeleteConnection = useCallback(async (id) => {
+    await removeConnectionRaw(id)
+    if (selectedConnectionId === id) setSelectedConnectionId(null)
+  }, [removeConnectionRaw, selectedConnectionId])
+
   function handleStart(fresh = false) {
-    if (canStart) startPipeline(selectedJob.id, instanceUrl.trim(), accessToken.trim(), batchSize, threads, params, fresh)
+    if (canStart) startPipeline(selectedConnectionId, selectedJob.id, batchSize, threads, params, fresh)
   }
 
   const hasResumable = savedProgress?.lastId && savedProgress?.status !== 'completed'
@@ -168,7 +184,19 @@ export default function App() {
 
       <main className="flex-1 p-5 max-w-7xl mx-auto w-full space-y-4">
 
-        {/* Top row: Job selector + Job details */}
+        {/* Connection panel — separate from job/pipeline config */}
+        <ConnectionPanel
+          connections={connections}
+          loading={connsLoading}
+          selectedId={selectedConnectionId}
+          onSelect={setSelectedConnectionId}
+          onSave={saveConnection}
+          onDelete={handleDeleteConnection}
+          onReload={reloadConnections}
+          disabled={isRunning}
+        />
+
+        {/* Job selector + Job details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           <div className="card">
@@ -243,49 +271,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Credentials + Pipeline config */}
+        {/* Pipeline configuration — job runtime params + controls only */}
         <div className="card">
-          <div className="card-header">Configuration &amp; Controls</div>
+          <div className="card-header">Pipeline Configuration</div>
           <div className="p-4 space-y-3">
 
-            {/* Row 1: credentials */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Instance URL</label>
-                <input
-                  className="input"
-                  type="text"
-                  value={instanceUrl}
-                  onChange={e => { setInstanceUrl(e.target.value); localStorage.setItem('sf_instanceUrl', e.target.value) }}
-                  placeholder="https://myorg.my.salesforce.com"
-                  disabled={isRunning}
-                  autoComplete="off"
-                />
-              </div>
-              <div>
-                <label className="label">Access Token</label>
-                <div className="relative">
-                  <input
-                    className="input pr-16"
-                    type={showToken ? 'text' : 'password'}
-                    value={accessToken}
-                    onChange={e => { setAccessToken(e.target.value); localStorage.setItem('sf_accessToken', e.target.value) }}
-                    placeholder="00D…"
-                    disabled={isRunning}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowToken(v => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 px-1"
-                  >
-                    {showToken ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Runtime params (job-defined, dynamic) */}
+            {/* Job-defined runtime params */}
             {(selectedJob?.runtimeParams || []).length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {(selectedJob.runtimeParams || []).map(rp => (
@@ -320,7 +311,7 @@ export default function App() {
               />
             )}
 
-            {/* Row 2: pipeline params + controls */}
+            {/* Page size + threads + controls */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
               <div>
                 <label className="label">Page Size (records per batch)</label>
@@ -351,6 +342,7 @@ export default function App() {
                   className="btn-primary flex-1"
                   onClick={() => handleStart(false)}
                   disabled={!canStart}
+                  title={!selectedConnectionId ? 'Select a connection above' : undefined}
                 >
                   {hasResumable ? '↩ Resume' : '▶ Start'}
                 </button>
@@ -359,6 +351,12 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {!selectedConnectionId && !isRunning && (
+              <p className="text-xs text-amber-600">
+                ↑ Select or add a Salesforce connection above to enable the pipeline.
+              </p>
+            )}
 
           </div>
 
@@ -375,7 +373,7 @@ export default function App() {
       </main>
 
       <footer className="text-center text-xs text-gray-400 py-3 border-t border-sf-border">
-        SF Async Data Pipeline · Spring Boot + React · Salesforce REST API
+        SF Async Data Pipeline · Node.js + React · Salesforce REST API
       </footer>
     </div>
   )

@@ -5,6 +5,7 @@ const { WebSocketServer } = require('ws');
 
 const jobService = require('./services/jobService');
 const progressService = require('./services/progressService');
+const connectionService = require('./services/connectionService');
 const salesforceService = require('./services/salesforceService');
 const pluginRegistry = require('./plugins/registry');
 const PipelineEngine = require('./pipeline/engine');
@@ -16,6 +17,7 @@ const PORT = process.env.PORT || 8080;
 const CLIENT_DIST = path.resolve(__dirname, '../client/dist');
 
 progressService.init();
+connectionService.init();
 jobService.init();
 
 const threadPool = new ThreadPool();
@@ -24,7 +26,7 @@ const engine = new PipelineEngine(salesforceService, progressService, pluginRegi
 const app = express();
 app.use(express.json());
 
-app.use('/api', apiRouter(jobService, progressService, pluginRegistry, engine));
+app.use('/api', apiRouter(jobService, progressService, pluginRegistry, engine, connectionService));
 
 // Serve React client if built
 app.use(express.static(CLIENT_DIST));
@@ -34,7 +36,7 @@ app.get('*', (req, res) => {
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
-wsHandler(wss, engine, jobService, progressService);
+wsHandler(wss, engine, jobService, progressService, connectionService);
 
 server.listen(PORT, () => {
   console.log(`sf-pipeline running on http://localhost:${PORT} (thread pool: ${threadPool.size} threads)`);

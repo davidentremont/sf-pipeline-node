@@ -1,17 +1,9 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
-
-const DB_PATH = process.env.PROGRESS_DB || path.resolve(process.cwd(), 'data/pipeline.db');
+const { getDb } = require('./db');
 
 let db;
 
 function init() {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
+  db = getDb();
   db.exec(`
     CREATE TABLE IF NOT EXISTS pipeline_progress (
       job_id          TEXT    NOT NULL,

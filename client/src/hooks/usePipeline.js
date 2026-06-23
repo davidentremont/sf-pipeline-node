@@ -154,8 +154,8 @@ export function usePipeline() {
     }
   }, [])
 
-  const startPipeline = useCallback((jobId, instanceUrl, accessToken, batchSize, threads, params, fresh = false) => {
-    send({ type: 'START', jobId, instanceUrl, accessToken, batchSize: Number(batchSize), threads: Number(threads), params: params || {}, fresh: !!fresh })
+  const startPipeline = useCallback((connectionId, jobId, batchSize, threads, params, fresh = false) => {
+    send({ type: 'START', connectionId, jobId, batchSize: Number(batchSize), threads: Number(threads), params: params || {}, fresh: !!fresh })
   }, [send])
 
   const stopPipeline = useCallback(() => send({ type: 'STOP' }), [send])

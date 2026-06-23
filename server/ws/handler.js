@@ -1,4 +1,4 @@
-function wsHandler(wss, engine, jobService, progressService) {
+function wsHandler(wss, engine, jobService, progressService, connectionService) {
   const sessions = new Set();
 
   wss.on('connection', (ws) => {
@@ -28,12 +28,19 @@ function wsHandler(wss, engine, jobService, progressService) {
       return;
     }
 
-    const jobId = msg.jobId;
-    const instanceUrl = (msg.instanceUrl || '').trim();
-    const accessToken = (msg.accessToken || '').trim();
-    const batchSize = msg.batchSize || 1000;
-    const threads = msg.threads || 5;
-    const fresh = !!msg.fresh;
+    // Resolve credentials — prefer connectionId lookup, fall back to inline fields
+    let instanceUrl = (msg.instanceUrl || '').trim();
+    let accessToken = (msg.accessToken || '').trim();
+
+    if (msg.connectionId) {
+      const conn = connectionService.get(msg.connectionId);
+      if (!conn) {
+        send(ws, { type: 'ERROR', timestamp: Date.now(), message: 'Connection not found — it may have been deleted' });
+        return;
+      }
+      instanceUrl = conn.instanceUrl;
+      accessToken = conn.accessToken;
+    }
 
     if (!instanceUrl) {
       send(ws, { type: 'ERROR', timestamp: Date.now(), message: 'Instance URL is required' });
@@ -43,6 +50,11 @@ function wsHandler(wss, engine, jobService, progressService) {
       send(ws, { type: 'ERROR', timestamp: Date.now(), message: 'Access token is required' });
       return;
     }
+
+    const jobId = msg.jobId;
+    const batchSize = msg.batchSize || 1000;
+    const threads = msg.threads || 5;
+    const fresh = !!msg.fresh;
 
     let job;
     try {
