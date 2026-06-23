@@ -9,11 +9,28 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "build:client": "cd client && npm install && npm run build"
+    "build:client": "cd client && npm install && npm run build",
+    "build:exe": "node scripts/build-exe.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "express": "^4.18.2",
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.12.0"
+  },
+  "pkg": {
+    "assets": [
+      "client/dist/**",
+      "jobs/**",
+      "server/pipeline/workerRunner.js",
+      "server/plugins/**/*.worker.js",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+    ],
+    "targets": [
+      "node20-win-x64"
+    ],
+    "outputPath": "dist-exe"
   }
 }

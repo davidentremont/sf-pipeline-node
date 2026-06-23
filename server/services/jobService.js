@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const JOBS_DIR = process.env.JOBS_DIR || path.resolve(process.cwd(), 'jobs');
+// Under a pkg executable jobs are bundled in the snapshot; otherwise use env or cwd.
+const JOBS_DIR = process.env.JOBS_DIR
+  || (process.pkg ? path.join(__dirname, '../../jobs') : path.resolve(process.cwd(), 'jobs'));
 
 let cachedJobs = [];
 

@@ -1,8 +1,17 @@
 const { Worker } = require('worker_threads');
 const path = require('path');
-const os = require('os');
+const os   = require('os');
+const fs   = require('fs');
 
-const RUNNER = path.join(__dirname, 'workerRunner.js');
+// Under a pkg executable, Worker threads cannot load scripts from the snapshot
+// filesystem. Extract workerRunner.js to a real temp file on first load.
+const RUNNER = (() => {
+  const src = path.join(__dirname, 'workerRunner.js');
+  if (!process.pkg) return src;
+  const tmp = path.join(os.tmpdir(), 'sf-pipeline-worker-runner.js');
+  fs.writeFileSync(tmp, fs.readFileSync(src, 'utf8'));
+  return tmp;
+})();
 
 class ThreadPool {
   constructor(size) {
